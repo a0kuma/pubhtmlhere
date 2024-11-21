@@ -38,6 +38,22 @@ if (argv.python) {
 	const syncClone = cmd.runSync('python3 -m http.server ' + String(port));
 	console.log(syncClone);
 } else {
-	connect(cors(), favicon('0.ico'), decodeUrlMiddleware, dirlist(base), connect.static(base)).listen(port, host);
+	const faviconBase64 = 'data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAgAAAAAAAAAAAAAAA...'; // truncated for brevity
+	const faviconBuffer = Buffer.from(faviconBase64.split(',')[1], 'base64');
+
+	connect(
+		cors(),
+		(req, res, next) => {
+			if (req.url === '/favicon.ico') {
+				res.writeHead(200, { 'Content-Type': 'image/x-icon' });
+				res.end(faviconBuffer);
+			} else {
+				next();
+			}
+		},
+		decodeUrlMiddleware,
+		dirlist(base),
+		connect.static(base)
+	).listen(port, host);
 	console.log('Server running at http://' + host + ':' + port + '/');
 }
