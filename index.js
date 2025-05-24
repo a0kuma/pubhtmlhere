@@ -6,8 +6,8 @@ const connect = require('connect');
 const cors = require('cors');
 const dirlist = require('dirlist');
 const yargs = require('yargs');
+const serveStatic = require('serve-static');
 
-// Parse command-line arguments
 const argv = yargs
 	.option('port', {
 		alias: 'p',
@@ -27,13 +27,13 @@ const host = '0.0.0.0';
 const port = parseInt(argv.port, 10) || 48489;
 const base = '.';
 
-// Middleware to decode URL paths
+
 function decodeUrlMiddleware(req, res, next) {
 	req.url = decodeURIComponent(req.url);
 	next();
 }
 
-// Middleware to serve favicon
+
 function faviconMiddleware(faviconBuffer) {
 	return function (req, res, next) {
 		if (req.url === '/favicon.ico') {
@@ -45,74 +45,74 @@ function faviconMiddleware(faviconBuffer) {
 	};
 }
 
-// Error handling middleware for dirlist
+
 function dirlistErrorHandler(base) {
 	const dirlistMiddleware = dirlist(base);
 	return function (req, res, next) {
+		// Check if path exists and is a directory before using dirlist
+		const requestPath = path.join(base, req.url.substring(1));
+		
 		try {
-			dirlistMiddleware(req, res, function (err) {
-				if (err) {
-					next(); // Continue to next middleware
-				} else {
-					next();
-				}
-			});
+			const stats = fs.statSync(requestPath);
+			if (stats.isDirectory()) {
+				dirlistMiddleware(req, res, function (err) {
+					if (err) {
+						next(err);
+					}
+				});
+			} else {
+				next();
+			}
 		} catch (error) {
+			// If path doesn't exist, continue to next middleware
 			next();
 		}
 	};
 }
 
-// Node.js version check
-const [major] = process.versions.node.split('.').map(Number);
 
-// Dynamic middleware for static file handling
+
 let staticErrorHandler;
-//if (major >= 24) {
-	// Use serve-static for newer Node.js
-	const serveStatic = require('serve-static');
-	staticErrorHandler = function (base) {
-		const staticMiddleware = serveStatic(base);
-		return function (req, res, next) {
-			staticMiddleware(req, res, function (err) {
-				if (err) {
-					res.statusCode = 404;
-					res.end('File not found');
-				}
-			});
-		};
-	};
-/*} else {
-	// Use legacy connect.static (deprecated)
-	staticErrorHandler = function (base) {
-		const staticMiddleware = connect.static(base);
-		return function (req, res, next) {
-			staticMiddleware(req, res, function (err) {
-				if (err) {
-					res.statusCode = 404;
-					res.end('File not found');
-				}
-			});
-		};
-	};
-}*/
 
-// Use Python HTTP server (optional)
+staticErrorHandler = function (base) {
+	const staticMiddleware = serveStatic(base, { fallthrough: false });
+	return function (req, res, next) {
+		staticMiddleware(req, res, function (err) {
+			if (err) {
+				// If file doesn't exist, let the request go to the next middleware
+				if (err.statusCode === 404) {
+					return next();
+				}
+				// Handle other errors
+				res.statusCode = err.statusCode || 500;
+				res.end(err.message);
+			}
+		});
+	};
+};
+
+
 if (argv.python) {
 	console.log("using python -m http.server on " + String(port));
-	const syncClone = cmd.runSync('python3 -m http.server ' + String(port));
+	const syncClone = cmd.runSync(`python3 -m http.server ${port}`);
 	console.log(syncClone);
 } else {
 	const faviconBase64 = 'data:image/x-icon;base64,AAABAAEAEBAAAAEAIABoBAAAFgAAACgAAAAQAAAAIAAAAAEABAAAAAAAgAAAAAAAAAAAAAAA...'; // truncated for brevity
 	const faviconBuffer = Buffer.from(faviconBase64.split(',')[1], 'base64');
 
-	connect(
-		cors(),
-		faviconMiddleware(faviconBuffer),
-		decodeUrlMiddleware,
-		dirlistErrorHandler(base),
-		staticErrorHandler(base)
-	).listen(port, host);
+	const app = connect();
+	app.use(cors());
+	app.use(faviconMiddleware(faviconBuffer));
+	app.use(decodeUrlMiddleware);
+	app.use(staticErrorHandler(base));
+	app.use(dirlistErrorHandler(base));
+	
+	// Final 404 handler if nothing matched
+	app.use(function(req, res) {
+		res.statusCode = 404;
+		res.end('Not found');
+	});
 
+	app.listen(port, host);
 	console.log('Server running at http://' + host + ':' + port + '/');
 }
