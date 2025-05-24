@@ -68,7 +68,7 @@ const [major] = process.versions.node.split('.').map(Number);
 
 // Dynamic middleware for static file handling
 let staticErrorHandler;
-if (major >= 24) {
+//if (major >= 24) {
 	// Use serve-static for newer Node.js
 	const serveStatic = require('serve-static');
 	staticErrorHandler = function (base) {
@@ -82,7 +82,7 @@ if (major >= 24) {
 			});
 		};
 	};
-} else {
+/*} else {
 	// Use legacy connect.static (deprecated)
 	staticErrorHandler = function (base) {
 		const staticMiddleware = connect.static(base);
@@ -95,7 +95,7 @@ if (major >= 24) {
 			});
 		};
 	};
-}
+}*/
 
 // Use Python HTTP server (optional)
 if (argv.python) {
