@@ -4,8 +4,7 @@ const path = require('path');
 const cmd = require('node-cmd');
 const connect = require('connect');
 const cors = require('cors');
-const dirlist = require('dirlist');//'connect-dirlist');
-const favicon = require('serve-favicon');
+const dirlist = require('dirlist');
 const yargs = require('yargs');
 
 const argv = yargs
@@ -25,12 +24,43 @@ const argv = yargs
 
 const host = '0.0.0.0';
 const port = parseInt(argv.port, 10) || 48489;
-const base = __dirname;
+const base = '.';
 
 // Middleware to decode URL paths
 function decodeUrlMiddleware(req, res, next) {
 	req.url = decodeURIComponent(req.url);
 	next();
+}
+
+// Error handling middleware for dirlist
+function dirlistErrorHandler(base) {
+	const dirlistMiddleware = dirlist(base);
+	return function(req, res, next) {
+		try {
+			dirlistMiddleware(req, res, function(err) {
+				if (err) {
+					next(); // Continue to next middleware if error occurs
+				} else {
+					next();
+				}
+			});
+		} catch (error) {
+			next(); // Continue to next middleware if error occurs
+		}
+	};
+}
+
+// Error handling middleware for static files
+function staticErrorHandler(base) {
+	const staticMiddleware = connect.static(base);
+	return function(req, res, next) {
+		staticMiddleware(req, res, function(err) {
+			if (err) {
+				res.statusCode = 404;
+				res.end('File not found');
+			}
+		});
+	};
 }
 
 if (argv.python) {
@@ -52,8 +82,8 @@ if (argv.python) {
 			}
 		},
 		decodeUrlMiddleware,
-		dirlist(base),
-		connect.static(base)
+		dirlistErrorHandler(base),
+		staticErrorHandler(base)
 	).listen(port, host);
 	console.log('Server running at http://' + host + ':' + port + '/');
 }

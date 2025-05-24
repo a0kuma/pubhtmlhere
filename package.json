@@ -1,6 +1,6 @@
 {
 	"name": "pubhtmlhere",
-	"version": "2.1.2",
+	"version": "2.2.1",
 	"description": "public your dir. here to some port",
 	"main": "index.js",
 	"scripts": {
@@ -30,7 +30,6 @@
 		"cors": "^2.8.5",
 		"dirlist": "^1.0.2",
 		"yargs": "^17.6.2",
-		"node-cmd": "*",
-		"serve-favicon":"*"
+		"node-cmd": "*"
 	}
 }
