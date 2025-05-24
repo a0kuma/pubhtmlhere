@@ -7,6 +7,7 @@ const cors = require('cors');
 const dirlist = require('dirlist');
 const yargs = require('yargs');
 
+// Parse command-line arguments
 const argv = yargs
 	.option('port', {
 		alias: 'p',
@@ -32,37 +33,71 @@ function decodeUrlMiddleware(req, res, next) {
 	next();
 }
 
+// Middleware to serve favicon
+function faviconMiddleware(faviconBuffer) {
+	return function (req, res, next) {
+		if (req.url === '/favicon.ico') {
+			res.writeHead(200, { 'Content-Type': 'image/x-icon' });
+			res.end(faviconBuffer);
+		} else {
+			next();
+		}
+	};
+}
+
 // Error handling middleware for dirlist
 function dirlistErrorHandler(base) {
 	const dirlistMiddleware = dirlist(base);
-	return function(req, res, next) {
+	return function (req, res, next) {
 		try {
-			dirlistMiddleware(req, res, function(err) {
+			dirlistMiddleware(req, res, function (err) {
 				if (err) {
-					next(); // Continue to next middleware if error occurs
+					next(); // Continue to next middleware
 				} else {
 					next();
 				}
 			});
 		} catch (error) {
-			next(); // Continue to next middleware if error occurs
+			next();
 		}
 	};
 }
 
-// Error handling middleware for static files
-function staticErrorHandler(base) {
-	const staticMiddleware = connect.static(base);
-	return function(req, res, next) {
-		staticMiddleware(req, res, function(err) {
-			if (err) {
-				res.statusCode = 404;
-				res.end('File not found');
-			}
-		});
+// Node.js version check
+const [major] = process.versions.node.split('.').map(Number);
+
+// Dynamic middleware for static file handling
+let staticErrorHandler;
+if (major >= 24) {
+	// Use serve-static for newer Node.js
+	const serveStatic = require('serve-static');
+	staticErrorHandler = function (base) {
+		const staticMiddleware = serveStatic(base);
+		return function (req, res, next) {
+			staticMiddleware(req, res, function (err) {
+				if (err) {
+					res.statusCode = 404;
+					res.end('File not found');
+				}
+			});
+		};
+	};
+} else {
+	// Use legacy connect.static (deprecated)
+	staticErrorHandler = function (base) {
+		const staticMiddleware = connect.static(base);
+		return function (req, res, next) {
+			staticMiddleware(req, res, function (err) {
+				if (err) {
+					res.statusCode = 404;
+					res.end('File not found');
+				}
+			});
+		};
 	};
 }
 
+// Use Python HTTP server (optional)
 if (argv.python) {
 	console.log("using python -m http.server on " + String(port));
 	const syncClone = cmd.runSync('python3 -m http.server ' + String(port));
@@ -73,17 +108,11 @@ if (argv.python) {
 
 	connect(
 		cors(),
-		(req, res, next) => {
-			if (req.url === '/favicon.ico') {
-				res.writeHead(200, { 'Content-Type': 'image/x-icon' });
-				res.end(faviconBuffer);
-			} else {
-				next();
-			}
-		},
+		faviconMiddleware(faviconBuffer),
 		decodeUrlMiddleware,
 		dirlistErrorHandler(base),
 		staticErrorHandler(base)
 	).listen(port, host);
+
 	console.log('Server running at http://' + host + ':' + port + '/');
 }
